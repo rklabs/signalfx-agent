@@ -40,7 +40,10 @@ RUN apt-get update -y && \
     netcat \
     socat \
     software-properties-common \
+    gcc \
     sudo \
+    linux-image-$(uname -r) \
+    iproute \
     && apt-get clean && \
     rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
@@ -48,12 +51,22 @@ RUN apt-get update -y && \
 # RUN curl -fsSL get.docker.com -o /tmp/get-docker.sh && \
 #     sh /tmp/get-docker.sh && \
 #     rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
-RUN cd /tmp && \
-    curl -sSl -O https://download.docker.com/linux/static/stable/x86_64/docker-17.12.1-ce.tgz && \
-    tar -xf docker*.tgz && \
-    chmod a+x docker/* && \
-    chown root:root docker/* && \
-    cp docker/* /usr/bin/
+
+#RUN cd /tmp && \
+#    curl -sSl -O https://download.docker.com/linux/static/stable/x86_64/docker-17.03.1-ce.tgz && \
+#    tar -xf docker*.tgz && \
+#    chmod a+x docker/* && \
+#    chown root:root docker/* && \
+#    cp docker/* /usr/bin/
+#RUN apt-get update && \
+RUN curl -fsSL https://download.docker.com/linux/$(. /etc/os-release; echo "$ID")/gpg > /tmp/dkey; apt-key add /tmp/dkey && \
+    add-apt-repository \
+       "deb [arch=amd64] https://download.docker.com/linux/$(. /etc/os-release; echo "$ID") \
+       $(lsb_release -cs) \
+       stable" && \
+    apt-get update && \
+    apt-get install -y docker-ce=17.03.3~ce-0~ubuntu-xenial
+#    apt-get update && \
 VOLUME /var/lib/docker
 EXPOSE 2375
 
@@ -68,14 +81,31 @@ EXPOSE 8443
 # minikube --vm-driver=none checks systemctl before starting.  Instead of
 # setting up a real systemd environment, install this shim to tell minikube
 # what it wants to know: localkube isn't started yet.
-COPY fake-systemctl.sh /usr/local/bin/systemctl
-RUN chmod a+x /usr/local/bin/systemctl
+#COPY fake-systemctl.sh /usr/local/bin/systemctl
+#RUN chmod a+x /usr/local/bin/systemctl
+#ENV XDG_RUNTIME_DIR=/run/user/`id -u`
+#RUN systemctl restart systemd-logind.service
+ENV SHELL /bin/bash
+RUN curl https://raw.githubusercontent.com/daleobrien/start-stop-daemon/master/start-stop-daemon.c > start-stop-daemon.c \
+    &&  gcc start-stop-daemon.c -o start-stop-daemon \
+    &&  mv start-stop-daemon /usr/bin/start-stop-daemon
+ADD systemctl /bin/systemctl-fake
+RUN chmod 755 /bin/systemctl-fake \
+    && mv /bin/systemctl /bin/systemctl.real \
+    && ln -s /bin/systemctl-fake /bin/systemctl
+RUN apt-get clean all
 
 COPY dind-cluster.sh /usr/local/bin/dind-cluster.sh
 RUN chmod a+x /usr/local/bin/dind-cluster.sh
 COPY config.sh /usr/local/bin/config.sh
 RUN chmod a+x /usr/local/bin/config.sh
 EXPOSE 8080
+
+# Install crictl for k8s 1.11.0
+ENV VERSION "v1.11.1"
+RUN curl -L https://github.com/kubernetes-incubator/cri-tools/releases/download/$VERSION/crictl-$VERSION-linux-amd64.tar.gz > crictl-$VERSION-linux-amd64.tar.gz \
+    && sudo tar zxvf crictl-$VERSION-linux-amd64.tar.gz -C /usr/local/bin \
+    && rm -f crictl-$VERSION-linux-amd64.tar.gz
 
 # Install helm
 RUN curl https://raw.githubusercontent.com/kubernetes/helm/master/scripts/get | bash

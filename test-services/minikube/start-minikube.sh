@@ -24,7 +24,7 @@ if [ -f /kubeconfig ]; then
 fi
 
 K8S_VERSION=${K8S_VERSION:-"latest"}
-MINIKUBE_OPTIONS="--vm-driver=none --bootstrapper=localkube"
+MINIKUBE_OPTIONS="--vm-driver=none --bootstrapper=kubeadm"
 if [ "$K8S_VERSION" = "latest" ]; then
     curl -sSl -o /usr/local/bin/kubectl https://storage.googleapis.com/kubernetes-release/release/`curl -s https://storage.googleapis.com/kubernetes-release/release/stable.txt`/bin/linux/amd64/kubectl
 else

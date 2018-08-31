@@ -37,7 +37,7 @@ class Minikube:
         else:
             return None
 
-    def load_kubeconfig(self, kubeconfig_path="/kubeconfig", timeout=300):
+    def load_kubeconfig(self, kubeconfig_path="/kubeconfig", timeout=3000):
         with tempfile.NamedTemporaryFile(dir="/tmp/scratch") as fd:
             kubeconfig = fd.name
             assert wait_for(p(container_cmd_exit_0, self.container, "test -f %s" % kubeconfig_path), timeout_seconds=timeout), \
@@ -83,6 +83,10 @@ class Minikube:
                     "/tmp/scratch": {
                         "bind": "/tmp/scratch",
                         "mode": "rw"
+                    },
+                    "/lib/modules": {
+                        "bind": "/host/lib/modules",
+                        "mode": "ro"
                     },
                 }
             }

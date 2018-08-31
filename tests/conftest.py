@@ -99,13 +99,14 @@ def pytest_addoption(parser):
 def pytest_generate_tests(metafunc):
     if 'minikube' in metafunc.fixturenames:
         k8s_version = metafunc.config.getoption("--k8s-version")
-        if not k8s_version:
-            version_to_test = K8S_DEFAULT_VERSION
-        elif k8s_version.lower() == "latest":
-            version_to_test = [K8S_SUPPORTED_VERSIONS[0]]
-        else:
-            assert k8s_version.strip('v') in K8S_SUPPORTED_VERSIONS, "K8S version \"%s\" not supported!" % k8s_version
-            version_to_test = k8s_version
+        #if not k8s_version:
+        #    version_to_test = K8S_DEFAULT_VERSION
+        #elif k8s_version.lower() == "latest":
+        #    version_to_test = [K8S_SUPPORTED_VERSIONS[0]]
+        #else:
+        #    assert k8s_version.strip('v') in K8S_SUPPORTED_VERSIONS, "K8S version \"%s\" not supported!" % k8s_version
+        #    version_to_test = k8s_version
+        version_to_test = k8s_version
         metafunc.parametrize("minikube", [version_to_test], ids=["v%s" % v.strip('v') for v in [version_to_test]], scope="session", indirect=True)
     if 'k8s_observer' in metafunc.fixturenames:
         k8s_observers = metafunc.config.getoption("--k8s-observers")
