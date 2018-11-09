@@ -1,46 +1,22 @@
+import os
 import random
-import re
 import string
 import subprocess
-import time
-import urllib
 from functools import partial as p
 
 import pytest
 
-from tests.helpers.assertions import has_log_message
-from tests.helpers.kubernetes.minikube import Minikube
-from tests.helpers.kubernetes.utils import container_is_running, has_docker_image
+from tests.helpers.kubernetes.minikube import Minikube, has_docker_image
 from tests.helpers.util import wait_for, get_docker_client, run_container
 
-
-def get_latest_k8s_version(url="https://storage.googleapis.com/kubernetes-release/release/stable.txt", max_attempts=3):
-    version = None
-    attempt = 0
-    while attempt < max_attempts:
-        attempt += 1
-        try:
-            with urllib.request.urlopen(url) as resp:
-                version = resp.read().decode("utf-8").strip()
-            break
-        except urllib.error.HTTPError as e:
-            if attempt == max_attempts:
-                raise e
-        time.sleep(5)
-        version = None
-    assert version, "Failed to get latest K8S version from %s" % url
-    assert re.match(r"^v?\d+\.\d+\.\d+$", version), "Unknown version '%s' from %s" % (version, url)
-    return version
-
-
-K8S_MIN_VERSION = "1.7.0"
-K8S_LATEST_VERSION = get_latest_k8s_version()
-K8S_DEFAULT_VERSION = re.sub(r"\.\d+$", ".0", K8S_LATEST_VERSION)
+REPO_ROOT_DIR = os.path.join(os.path.dirname(os.path.realpath(__file__)), "..")
+K8S_DEFAULT_VERSION = "1.13.0"
 K8S_DEFAULT_TIMEOUT = 300
-K8S_DEFAULT_TEST_TIMEOUT = 120
+K8S_DEFAULT_TEST_TIMEOUT = 60
 K8S_DEFAULT_CONTAINER_NAME = "minikube"
 K8S_SUPPORTED_OBSERVERS = ["k8s-api", "k8s-kubelet"]
 K8S_DEFAULT_OBSERVERS = K8S_SUPPORTED_OBSERVERS
+K8S_SFX_AGENT_BUILD_TIMEOUT = int(os.environ.get("K8S_SFX_AGENT_BUILD_TIMEOUT", 600))
 
 
 # pylint: disable=line-too-long
@@ -91,22 +67,6 @@ def pytest_addoption(parser):
 
 
 def pytest_generate_tests(metafunc):
-    if "minikube" in metafunc.fixturenames:
-        k8s_version = metafunc.config.getoption("--k8s-version")
-        if not k8s_version:
-            version_to_test = K8S_DEFAULT_VERSION
-        elif k8s_version.lower() == "latest":
-            version_to_test = K8S_LATEST_VERSION
-        else:
-            version_to_test = k8s_version
-        assert re.match(r"^v?\d+\.\d+\.\d+$", version_to_test), "Invalid K8S version '%s'" % version_to_test
-        metafunc.parametrize(
-            "minikube",
-            [version_to_test],
-            ids=["v%s" % v.strip("v") for v in [version_to_test]],
-            scope="session",
-            indirect=True,
-        )
     if "k8s_observer" in metafunc.fixturenames:
         k8s_observers = metafunc.config.getoption("--k8s-observers")
         if not k8s_observers:
@@ -131,56 +91,27 @@ def minikube(request, worker_id):
                 pass
 
     request.addfinalizer(teardown)
-    k8s_version = "v" + request.param.lstrip("v")
+    k8s_version = request.config.getoption("--k8s-version")
     k8s_timeout = int(request.config.getoption("--k8s-timeout"))
     k8s_container = request.config.getoption("--k8s-container")
     k8s_skip_teardown = request.config.getoption("--k8s-skip-teardown")
     inst = Minikube()
-    inst.worker_id = worker_id
     if k8s_container:
         inst.connect(k8s_container, k8s_timeout)
         k8s_skip_teardown = True
     elif worker_id in ("master", "gw0"):
         inst.deploy(k8s_version, k8s_timeout)
+        inst.start_registry()
         if worker_id == "gw0":
             k8s_skip_teardown = True
     else:
-        inst.connect(K8S_DEFAULT_CONTAINER_NAME, k8s_timeout, version=k8s_version)
+        inst.connect(K8S_DEFAULT_CONTAINER_NAME, k8s_timeout, k8s_version=k8s_version)
         k8s_skip_teardown = True
     return inst
 
 
 @pytest.fixture(scope="session")
-def registry(minikube, worker_id, request):  # pylint: disable=redefined-outer-name
-    def get_registry_logs():
-        cont.reload()
-        return cont.logs().decode("utf-8")
-
-    cont = None
-    port = None
-    k8s_container = request.config.getoption("--k8s-container")
-    if not k8s_container and worker_id in ("master", "gw0"):
-        minikube.start_registry()
-        port = minikube.registry_port
-    print("\nWaiting for registry to be ready ...")
-    assert wait_for(
-        p(container_is_running, minikube.client, "registry"), timeout_seconds=60, interval_seconds=2
-    ), "timed out waiting for registry container to start!"
-    cont = minikube.client.containers.get("registry")
-    assert wait_for(
-        lambda: has_log_message(get_registry_logs(), message="listening on [::]:"),
-        timeout_seconds=30,
-        interval_seconds=2,
-    ), "timed out waiting for registry to be ready!"
-    if not port:
-        match = re.search(r"listening on \[::\]:(\d+)", get_registry_logs())
-        assert match, "failed to determine registry port!"
-        port = int(match.group(1))
-    return {"container": cont, "port": port}
-
-
-@pytest.fixture(scope="session")
-def agent_image(minikube, registry, request, worker_id):  # pylint: disable=redefined-outer-name
+def agent_image(minikube, request, worker_id):  # pylint: disable=redefined-outer-name
     def teardown():
         if temp_agent_name and temp_agent_tag:
             try:
@@ -225,9 +156,11 @@ def agent_image(minikube, registry, request, worker_id):  # pylint: disable=rede
                 env={"PULL_CACHE": "yes", "AGENT_IMAGE_NAME": agent_image_name, "AGENT_VERSION": agent_image_tag},
                 stderr=subprocess.STDOUT,
                 check=True,
+                cwd=REPO_ROOT_DIR,
+                timeout=K8S_SFX_AGENT_BUILD_TIMEOUT,
             )
             sfx_agent_image = client.images.get(agent_image_name + ":" + agent_image_tag)
-        temp_agent_name = "localhost:%d/signalfx-agent-dev" % registry["port"]
+        temp_agent_name = "localhost:%d/signalfx-agent-dev" % minikube.registry_port
         temp_agent_tag = "latest"
         print("\nPushing agent image to minikube ...")
         sfx_agent_image.tag(temp_agent_name, tag=temp_agent_tag)
@@ -240,7 +173,7 @@ def agent_image(minikube, registry, request, worker_id):  # pylint: disable=rede
         print("\nWaiting for agent image to be built/pulled to minikube ...")
         assert wait_for(
             p(has_docker_image, minikube.client, agent_image_name, agent_image_tag),
-            timeout_seconds=600,
+            timeout_seconds=K8S_SFX_AGENT_BUILD_TIMEOUT,
             interval_seconds=2,
         ), 'timed out waiting for agent image "%s:%s"!' % (agent_image_name, agent_image_tag)
         sfx_agent_image = minikube.client.images.get(agent_image_name + ":" + agent_image_tag)
