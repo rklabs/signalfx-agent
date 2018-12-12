@@ -4,9 +4,9 @@ set -euxo pipefail
 
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 
-[ -z ${AGENT_CHART_DIR-} ] && echo 'Please set $AGENT_CHART_DIR' && exit 1
+AGENT_CHART_DIR="$SCRIPT_DIR/helm/signalfx-agent"
 
-AGENT_VERSION=${AGENT_VERSION-$($SCRIPT_DIR/../../scripts/latest-release)}
+AGENT_VERSION=${AGENT_VERSION-$($SCRIPT_DIR/../../scripts/latest-final-release)}
 
 templates="configmap.yaml daemonset.yaml clusterrole.yaml clusterrolebinding.yaml serviceaccount.yaml"
 for f in $templates; do
