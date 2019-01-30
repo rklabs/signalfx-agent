@@ -18,6 +18,7 @@ type Dimension struct {
 	Value string
 }
 
+// Copy creates a copy of the the given dimProps object
 func (dp *DimProperties) Copy() *DimProperties {
 	clonedDimension := Dimension{
 		Name:  dp.Dimension.Name,

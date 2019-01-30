@@ -62,9 +62,9 @@ func (dc *DatapointCache) DeleteByKey(key interface{}) {
 
 	switch dc.uidKindCache[cacheKey] {
 	case "Pod":
-		dc.HandleDeletePod(cacheKey)
+		dc.handleDeletePod(cacheKey)
 	case "Service":
-		dc.HandleDeleteService(cacheKey)
+		dc.handleDeleteService(cacheKey)
 	}
 
 	delete(dc.uidKindCache, cacheKey)
@@ -96,7 +96,7 @@ func (dc *DatapointCache) HandleAdd(newObj runtime.Object) interface{} {
 
 	switch o := newObj.(type) {
 	case *v1.Pod:
-		dps, dimProps = dc.HandleAddPod(o)
+		dps, dimProps = dc.handleAddPod(o)
 		kind = "Pod"
 	case *v1.Namespace:
 		dps = datapointsForNamespace(o)
@@ -123,7 +123,7 @@ func (dc *DatapointCache) HandleAdd(newObj runtime.Object) interface{} {
 		dimProps = dimPropsForNode(o, dc.useNodeName)
 		kind = "Node"
 	case *v1.Service:
-		dc.HandleAddService(o)
+		dc.handleAddService(o)
 		kind = "Service"
 	default:
 		log.WithFields(log.Fields{
@@ -267,10 +267,10 @@ func (dc *DatapointCache) AllDimProperties() []*atypes.DimProperties {
 	return dimProps
 }
 
-// HandleAddPod gets datapoints and dim props for a pod object, and adds
+// handleAddPod gets datapoints and dim props for a pod object, and adds
 // the pod to the service:pod cache. If a service is matched, adds the
 // service property to the pod.
-func (dc *DatapointCache) HandleAddPod(pod *v1.Pod) ([]*datapoint.Datapoint,
+func (dc *DatapointCache) handleAddPod(pod *v1.Pod) ([]*datapoint.Datapoint,
 	*atypes.DimProperties) {
 	dps := datapointsForPod(pod)
 	dimProps := dimPropsForPod(pod)
@@ -282,23 +282,23 @@ func (dc *DatapointCache) HandleAddPod(pod *v1.Pod) ([]*datapoint.Datapoint,
 	return dps, dimProps
 }
 
-func (dc *DatapointCache) HandleDeletePod(key interface{}) {
+func (dc *DatapointCache) handleDeletePod(key interface{}) {
 	cacheKey := key.(types.UID)
 	dc.podServiceCache.DeletePodFromCache(cacheKey)
 }
 
-// HandleAddService adds a service to the cache and adds the "service" property
+// handleAddService adds a service to the cache and adds the "service" property
 // to each matching pod that the service selector matches
-func (dc *DatapointCache) HandleAddService(svc *v1.Service) {
+func (dc *DatapointCache) handleAddService(svc *v1.Service) {
 	dc.podServiceCache.SetService(svc)
 	podUIDs := dc.podServiceCache.GetPodUIDsForService(svc)
 	dc.updateServicePropForPods(podUIDs)
 }
 
-// HandleDeleteService removes a service from the cache. After removing
+// handleDeleteService removes a service from the cache. After removing
 // the service from the cache, we need to update the "orphaned" pods
 // that may now match another service, or no service.
-func (dc *DatapointCache) HandleDeleteService(key interface{}) {
+func (dc *DatapointCache) handleDeleteService(key interface{}) {
 	cacheKey := key.(types.UID)
 	podUIDs := dc.podServiceCache.GetPodUIDsForServiceUID(cacheKey)
 	dc.podServiceCache.DeleteServiceFromCache(cacheKey)

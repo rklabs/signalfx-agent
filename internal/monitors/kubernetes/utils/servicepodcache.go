@@ -10,6 +10,8 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 )
 
+// PodServiceCache is an internal cache for mapping
+// services to pods for property propagation.
 type PodServiceCache struct {
 	svcUIDNamespaceCache map[types.UID]string
 	svcUIDNameCache      map[types.UID]string
@@ -24,6 +26,7 @@ type svcSet map[types.UID]bool
 
 type podsSet map[types.UID]bool
 
+// NewPodServiceCache creates a new service:pod cache
 func NewPodServiceCache() *PodServiceCache {
 	return &PodServiceCache{
 		svcUIDNamespaceCache: make(map[types.UID]string),
@@ -167,6 +170,8 @@ func (psc *PodServiceCache) GetPodUIDsForService(svc *v1.Service) []types.UID {
 	return psc.GetPodUIDsForServiceUID(svc.UID)
 }
 
+// GetPodUIDsForServiceUID looks up a service in the cache and returns
+// the pods that match the services selector.
 func (psc *PodServiceCache) GetPodUIDsForServiceUID(svcUID types.UID) []types.UID {
 	var pods []types.UID
 	if podSet, exists := psc.svcPodUIDCache[svcUID]; exists {
