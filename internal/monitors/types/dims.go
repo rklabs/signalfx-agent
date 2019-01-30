@@ -20,10 +20,7 @@ type Dimension struct {
 
 // Copy creates a copy of the the given dimProps object
 func (dp *DimProperties) Copy() *DimProperties {
-	clonedDimension := Dimension{
-		Name:  dp.Dimension.Name,
-		Value: dp.Dimension.Value,
-	}
+	clonedDimension := dp.Dimension
 
 	clonedProperties := make(map[string]string)
 	for k, v := range dp.Properties {
