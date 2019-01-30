@@ -275,9 +275,9 @@ func (dc *DatapointCache) handleAddPod(pod *v1.Pod) ([]*datapoint.Datapoint,
 	dps := datapointsForPod(pod)
 	dimProps := dimPropsForPod(pod)
 	dc.podServiceCache.SetPod(pod)
-	service, err := dc.podServiceCache.GetServiceNameForPod(pod)
-	if err == nil {
-		dimProps.Properties["service"] = service
+	service := dc.podServiceCache.GetServiceNameForPod(pod)
+	if service != nil {
+		dimProps.Properties["service"] = *service
 	}
 	return dps, dimProps
 }
@@ -308,18 +308,12 @@ func (dc *DatapointCache) handleDeleteService(key interface{}) {
 // updateServicePropForPods takes a list of pod UIDs, gets the matching
 // service for the pod, and adds the service property to the pod if one exists
 func (dc *DatapointCache) updateServicePropForPods(podUIDs []types.UID) {
-
 	for _, podUID := range podUIDs {
-		service, err := dc.podServiceCache.GetServiceNameForPodUID(podUID)
-		log.WithFields(log.Fields{
-			"service": service,
-			"err":     err,
-			"pod":     podUID,
-		}).Info("Adding/Removing service property to pod")
-		if err != nil {
-			delete(dc.dimPropCache[podUID].Properties, "service")
+		service := dc.podServiceCache.GetServiceNameForPodUID(podUID)
+		if service != nil {
+			dc.dimPropCache[podUID].Properties["service"] = *service
 		} else {
-			dc.dimPropCache[podUID].Properties["service"] = service
+			delete(dc.dimPropCache[podUID].Properties, "service")
 		}
 	}
 }

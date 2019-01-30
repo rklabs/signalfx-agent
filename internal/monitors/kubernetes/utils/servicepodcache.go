@@ -1,7 +1,6 @@
 package utils
 
 import (
-	"errors"
 	"reflect"
 	"sort"
 
@@ -199,15 +198,8 @@ func (psc *PodServiceCache) getServiceNamesForPod(pod *v1.Pod) []string {
 // updating the "service" property, which only may have one value.
 // Selection method is sorting strings alphabetically and selecting the
 // first service off the top.
-func (psc *PodServiceCache) GetServiceNameForPod(pod *v1.Pod) (string, error) {
-	var service string
-	services := psc.getServiceNamesForPod(pod)
-	if len(services) == 0 {
-		return service, errors.New("no service matched pod")
-	}
-	sort.Strings(services)
-	service = services[0]
-	return service, nil
+func (psc *PodServiceCache) GetServiceNameForPod(pod *v1.Pod) *string {
+	return psc.GetServiceNameForPodUID(pod.UID)
 }
 
 // getServiceNamesForPod looks up a pod in the cache and returns its matching
@@ -227,13 +219,12 @@ func (psc *PodServiceCache) getServiceNamesForPodUID(podUID types.UID) []string 
 // updating the "service" property, which only may have one value.
 // Selection method is sorting strings alphabetically and selecting the
 // first service off the top.
-func (psc *PodServiceCache) GetServiceNameForPodUID(podUID types.UID) (string, error) {
-	var service string
+func (psc *PodServiceCache) GetServiceNameForPodUID(podUID types.UID) *string {
+	var service *string
 	services := psc.getServiceNamesForPodUID(podUID)
-	if len(services) == 0 {
-		return service, errors.New("no service matched pod")
+	if len(services) > 0 {
+		sort.Strings(services)
+		service = &services[0]
 	}
-	sort.Strings(services)
-	service = services[0]
-	return service, nil
+	return service
 }
