@@ -81,7 +81,7 @@ func (dpc *dimensionPropertyClient) SetPropertiesOnDimension(dimProps *types.Dim
 		return nil
 	}
 
-	if !dpc.isDuplicate(filteredDimProps) {
+	if !dpc.isDuplicate(filteredDimProps.Copy()) {
 		dpc.reqSema <- struct{}{}
 		err := dpc.doReq(filteredDimProps.Name, filteredDimProps.Value,
 			filteredDimProps.Properties, filteredDimProps.Tags)

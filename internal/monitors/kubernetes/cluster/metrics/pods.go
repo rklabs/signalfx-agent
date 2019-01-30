@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/signalfx/golib/datapoint"
+	k8sutil "github.com/signalfx/signalfx-agent/internal/monitors/kubernetes/utils"
 	atypes "github.com/signalfx/signalfx-agent/internal/monitors/types"
 	"github.com/signalfx/signalfx-agent/internal/utils"
 	"k8s.io/api/core/v1"
@@ -74,7 +75,7 @@ func datapointsForPod(pod *v1.Pod) []*datapoint.Datapoint {
 }
 
 func dimPropsForPod(pod *v1.Pod) *atypes.DimProperties {
-	props, tags := propsAndTagsFromLabels(pod.Labels)
+	props, tags := k8sutil.PropsAndTagsFromLabels(pod.Labels)
 
 	for _, or := range pod.OwnerReferences {
 		props[utils.LowercaseFirstChar(or.Kind)] = or.Name
