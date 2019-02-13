@@ -5,6 +5,7 @@ import (
 	"sync"
 
 	"github.com/davecgh/go-spew/spew"
+	"github.com/hashicorp/go-multierror"
 	"github.com/pkg/errors"
 	"github.com/signalfx/golib/datapoint"
 	"github.com/signalfx/golib/event"
@@ -177,13 +178,23 @@ func (mm *MonitorManager) handleNewConfig(conf *config.MonitorConfig) (config.Mo
 		return monConfig, mm.createAndConfigureNewMonitor(monConfig, nil)
 	}
 
-	mm.makeMonitorsForMatchingEndpoints(monConfig)
+	err = validateConfigWithDiscoveryRule(monConfig)
+	if err != nil {
+		return nil, err
+	}
+
 	// We need to go and see if any discovered endpoints should be
 	// monitored by this config, if they aren't already.
+	err = mm.makeMonitorsForMatchingEndpoints(monConfig)
+	if err != nil {
+		return nil, err
+	}
+
 	return monConfig, nil
 }
 
-func (mm *MonitorManager) makeMonitorsForMatchingEndpoints(conf config.MonitorCustomConfig) {
+func (mm *MonitorManager) makeMonitorsForMatchingEndpoints(conf config.MonitorCustomConfig) error {
+	var result *multierror.Error
 	for id, endpoint := range mm.discoveredEndpoints {
 		// Self configured endpoints are monitored immediately upon being
 		// created and never need to be matched against discovery rules.
@@ -209,6 +220,7 @@ func (mm *MonitorManager) makeMonitorsForMatchingEndpoints(conf config.MonitorCu
 					"endpointID":  endpoint.Core().ID,
 					"monitorType": conf.MonitorConfigCore().Type,
 				}).Error("Error monitoring endpoint that matched rule")
+				multierror.Append(result, err)
 			} else {
 				log.WithFields(log.Fields{
 					"endpointID":  endpoint.Core().ID,
@@ -219,6 +231,7 @@ func (mm *MonitorManager) makeMonitorsForMatchingEndpoints(conf config.MonitorCu
 			log.Debug("The monitor did not match")
 		}
 	}
+	return result.ErrorOrNil()
 }
 
 func (mm *MonitorManager) isEndpointIDMonitoredByConfig(conf config.MonitorCustomConfig, id services.ID) bool {

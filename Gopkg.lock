@@ -1444,6 +1444,7 @@
     "github.com/google/cadvisor/info/v1",
     "github.com/gorilla/mux",
     "github.com/hashicorp/consul/api",
+    "github.com/hashicorp/go-multierror",
     "github.com/hashicorp/golang-lru",
     "github.com/hashicorp/vault/api",
     "github.com/iancoleman/strcase",

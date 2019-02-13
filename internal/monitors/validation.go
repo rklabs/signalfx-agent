@@ -46,6 +46,14 @@ func validateConfig(monConfig config.MonitorCustomConfig) error {
 	return validation.ValidateCustomConfig(monConfig)
 }
 
+// Configuration with discovery rules is a bit tricky to validate since in its
+// given form, it will never validate since there is no host/port.  But we need
+// a way to give upfront feedback if there are other validation issues with the
+// config since otherwise the user has to wait until the endpoint has been
+// discovered and the monitor tries to initialize to see validation errors.
+func validateConfigWithDiscoveryRule(monConfig config.MonitorCustomConfig) error {
+}
+
 func configAcceptsEndpoints(monConfig config.MonitorCustomConfig) bool {
 	confVal := reflect.Indirect(reflect.ValueOf(monConfig))
 	coreConfField, ok := confVal.Type().FieldByName("MonitorConfig")
