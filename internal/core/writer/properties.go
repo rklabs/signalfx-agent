@@ -76,12 +76,12 @@ func newDimensionPropertyClient(conf *config.WriterConfig) (*dimensionPropertyCl
 func (dpc *dimensionPropertyClient) SetPropertiesOnDimension(dimProps *types.DimProperties) error {
 	filteredDimProps := &(*dimProps)
 
-	filteredDimProps = dpc.PropertyFilterSet.FilterDimProps(filteredDimProps)
+	filteredDimProps = dpc.PropertyFilterSet.FilterDimProps(filteredDimProps).Copy()
 	if filteredDimProps == nil {
 		return nil
 	}
 
-	if !dpc.isDuplicate(filteredDimProps.Copy()) {
+	if !dpc.isDuplicate(filteredDimProps) {
 		dpc.reqSema <- struct{}{}
 		err := dpc.doReq(filteredDimProps.Name, filteredDimProps.Value,
 			filteredDimProps.Properties, filteredDimProps.Tags)

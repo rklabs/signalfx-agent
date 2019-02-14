@@ -15,32 +15,42 @@ type podsSet map[types.UID]bool
 // for quicker lookup than querying the API for them each time.
 type PodCache struct {
 	namespacePodUIDCache map[string]podsSet
-	podUIDNamespaceCache map[types.UID]string
-	podUIDLabelCache     map[types.UID]labels.Set
-	podUIDORCache        map[types.UID][]metav1.OwnerReference
+	cachedPods           map[types.UID]*CachedPod
+}
+
+// CachedPod is used for holding only the neccessary
+type CachedPod struct {
+	UID             types.UID
+	LabelSet        labels.Set
+	OwnerReferences []metav1.OwnerReference
+	Namespace       string
+}
+
+func newCachedPod(pod *v1.Pod) *CachedPod {
+	return &CachedPod{
+		UID:             pod.UID,
+		LabelSet:        labels.Set(pod.Labels),
+		OwnerReferences: pod.OwnerReferences,
+		Namespace:       pod.Namespace,
+	}
 }
 
 // NewPodCache creates a new minimal pod cache
 func NewPodCache() *PodCache {
 	return &PodCache{
 		namespacePodUIDCache: make(map[string]podsSet),
-		podUIDNamespaceCache: make(map[types.UID]string),
-		podUIDLabelCache:     make(map[types.UID]labels.Set),
-		podUIDORCache:        make(map[types.UID][]metav1.OwnerReference),
+		cachedPods:           make(map[types.UID]*CachedPod),
 	}
 }
 
 // IsCached checks if a pod was already in the cache, or if
 // the mapped values have changed. Returns true if no change
 func (pc *PodCache) IsCached(pod *v1.Pod) bool {
+	cachedPod, exists := pc.cachedPods[pod.UID]
 	labelSet := labels.Set(pod.Labels)
-	cachedLabelSet := pc.podUIDLabelCache[pod.UID]
-	cachedNamespace := pc.podUIDNamespaceCache[pod.UID]
-	cachedOR := pc.podUIDORCache[pod.UID]
-
-	return reflect.DeepEqual(cachedLabelSet, labelSet) &&
-		(cachedNamespace == pod.Namespace) &&
-		(reflect.DeepEqual(cachedOR, pod.OwnerReferences))
+	return exists && reflect.DeepEqual(cachedPod.LabelSet, labelSet) &&
+		(cachedPod.Namespace == pod.Namespace) &&
+		(reflect.DeepEqual(cachedPod.OwnerReferences, pod.OwnerReferences))
 }
 
 // AddPod adds or updates a pod in cache
@@ -48,28 +58,34 @@ func (pc *PodCache) AddPod(pod *v1.Pod) {
 	if _, exists := pc.namespacePodUIDCache[pod.Namespace]; !exists {
 		pc.namespacePodUIDCache[pod.Namespace] = make(map[types.UID]bool)
 	}
+	// add new pod
+	if _, exists := pc.cachedPods[pod.UID]; !exists {
+		pc.namespacePodUIDCache[pod.Namespace][pod.UID] = true
+		pc.cachedPods[pod.UID] = newCachedPod(pod)
+		return
+	}
+	// update existing pod
 	pc.namespacePodUIDCache[pod.Namespace][pod.UID] = true
-	pc.podUIDNamespaceCache[pod.UID] = pod.Namespace
-	pc.podUIDLabelCache[pod.UID] = labels.Set(pod.Labels)
-	pc.podUIDORCache[pod.UID] = pod.OwnerReferences
+	pc.cachedPods[pod.UID].Namespace = pod.Namespace
+	pc.cachedPods[pod.UID].LabelSet = labels.Set(pod.Labels)
+	pc.cachedPods[pod.UID].OwnerReferences = pod.OwnerReferences
 }
 
 // DeleteByKey removes a pod from the cache given a UID
 func (pc *PodCache) DeleteByKey(key types.UID) {
-	namespace := pc.podUIDNamespaceCache[key]
+	namespace := pc.cachedPods[key].Namespace
 	delete(pc.namespacePodUIDCache[namespace], key)
-	delete(pc.podUIDNamespaceCache, key)
-	delete(pc.podUIDLabelCache, key)
+	delete(pc.cachedPods, key)
 }
 
 // GetLabels retrieves a pod's cached label set
 func (pc *PodCache) GetLabels(key types.UID) labels.Set {
-	return pc.podUIDLabelCache[key]
+	return pc.cachedPods[key].LabelSet
 }
 
 // GetOwnerReferences retrieves a pod's cached owner references
 func (pc *PodCache) GetOwnerReferences(key types.UID) []metav1.OwnerReference {
-	return pc.podUIDORCache[key]
+	return pc.cachedPods[key].OwnerReferences
 }
 
 // GetPodsInNamespace returns a list of pod UIDs given a namespace
@@ -83,19 +99,11 @@ func (pc *PodCache) GetPodsInNamespace(namespace string) []types.UID {
 	return pods
 }
 
-// GetMatchingServices returns a list of service names that match the given
-// pod, given the services are in the cache arleady
-func (pc *PodCache) GetMatchingServices(podUID types.UID, sc *ServiceCache) []string {
-	var services []string
-	if labelSet, exists := pc.podUIDLabelCache[podUID]; exists {
-		for svcUID, selector := range sc.svcUIDSelectorCache {
-			if selector.Matches(labelSet) &&
-				sc.svcUIDNamespaceCache[svcUID] == pc.podUIDNamespaceCache[podUID] {
-				// update service:pods cache
-				sc.svcUIDPodsCache[svcUID][podUID] = true
-				services = append(services, sc.svcUIDNameCache[svcUID])
-			}
-		}
+// GetCachedPod returns a CachedPod object from the cache if it exists
+func (pc *PodCache) GetCachedPod(podUID types.UID) *CachedPod {
+	var cachedPod *CachedPod
+	if pod, exists := pc.cachedPods[podUID]; exists {
+		cachedPod = pod
 	}
-	return services
+	return cachedPod
 }

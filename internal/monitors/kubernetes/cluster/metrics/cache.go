@@ -176,10 +176,13 @@ func (dc *DatapointCache) handleAddPod(pod *v1.Pod) ([]*datapoint.Datapoint,
 	if !dc.podCache.IsCached(pod) {
 		dc.podCache.AddPod(pod)
 	}
-
+	cachedPod := dc.podCache.GetCachedPod(pod.UID)
 	dps := datapointsForPod(pod)
-	dimProps := dimPropsForPod(pod.UID, dc.podCache, dc.serviceCache)
-	return dps, dimProps
+	if cachedPod != nil {
+		dimProps := dimPropsForPod(cachedPod, dc.serviceCache)
+		return dps, dimProps
+	}
+	return dps, nil
 }
 
 // handleAddService adds a service to internal cache and, if needed,
@@ -189,9 +192,12 @@ func (dc *DatapointCache) handleAddService(svc *v1.Service) {
 	if !dc.serviceCache.IsCached(svc) {
 		dc.serviceCache.AddService(svc)
 		for _, podUID := range dc.podCache.GetPodsInNamespace(svc.Namespace) {
-			dimProps := dimPropsForPod(podUID, dc.podCache, dc.serviceCache)
-			if dimProps != nil {
-				dc.addDimPropsToCache(podUID, dimProps)
+			cachedPod := dc.podCache.GetCachedPod(podUID)
+			if cachedPod != nil {
+				dimProps := dimPropsForPod(cachedPod, dc.serviceCache)
+				if dimProps != nil {
+					dc.addDimPropsToCache(podUID, dimProps)
+				}
 			}
 		}
 	}
@@ -202,9 +208,12 @@ func (dc *DatapointCache) handleAddService(svc *v1.Service) {
 func (dc *DatapointCache) handleDeleteService(svcUID types.UID) {
 	pods := dc.serviceCache.DeleteByKey(svcUID)
 	for _, podUID := range pods {
-		dimProps := dimPropsForPod(podUID, dc.podCache, dc.serviceCache)
-		if dimProps != nil {
-			dc.addDimPropsToCache(podUID, dimProps)
+		cachedPod := dc.podCache.GetCachedPod(podUID)
+		if cachedPod != nil {
+			dimProps := dimPropsForPod(cachedPod, dc.serviceCache)
+			if dimProps != nil {
+				dc.addDimPropsToCache(podUID, dimProps)
+			}
 		}
 	}
 }

@@ -72,3 +72,18 @@ func (sc *ServiceCache) DeleteByKey(key types.UID) []types.UID {
 	delete(sc.svcUIDNameCache, key)
 	return pods
 }
+
+// GetMatchingServices returns a list of service names that match the given
+// pod, given the services are in the cache arleady
+func (sc *ServiceCache) GetMatchingServices(cachedPod *CachedPod) []string {
+	var services []string
+	for svcUID, selector := range sc.svcUIDSelectorCache {
+		if selector.Matches(cachedPod.LabelSet) &&
+			sc.svcUIDNamespaceCache[svcUID] == cachedPod.Namespace {
+			// update service:pods cache
+			sc.svcUIDPodsCache[svcUID][cachedPod.UID] = true
+			services = append(services, sc.svcUIDNameCache[svcUID])
+		}
+	}
+	return services
+}
